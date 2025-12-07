@@ -19,99 +19,224 @@ interface Asset {
 const SVG_TO_AE_SCRIPT = `
 // SVGAConverter_AE.jsx
 // ExtendScript for After Effects
-// Imports SVGA extracted assets and reconstructs them with a Progress Bar UI
+// Imports SVGA extracted assets and reconstructs the animation with full keyframes.
+// Supports: Transform (Matrix), Opacity, Blend Modes, Track Mattes, Rectangular Masks.
 
-(function svgaToAeWithProgress(){
+(function svgaToAeWithKeys(){
     
-    // 1. Select Folder
-    var inputFolder = Folder.selectDialog("Select the folder containing extracted SVGA assets (images/svgs)");
-    if(!inputFolder){
+    var inputFolder = Folder.selectDialog("Select the folder containing extracted SVGA assets (images)");
+    if(!inputFolder) return;
+
+    // 1. Read Manifest
+    var manifest = null;
+    var manifestFile = new File(inputFolder.parent.fsName + "/layers_manifest.json");
+    if(!manifestFile.exists) manifestFile = new File(inputFolder.fsName + "/layers_manifest.json");
+
+    if(manifestFile.exists){
+        manifestFile.open('r');
+        manifestFile.encoding = 'UTF-8';
+        var content = manifestFile.read();
+        manifestFile.close();
+        try { 
+            manifest = eval("(" + content + ")"); 
+        } catch(e){ 
+            alert("Error parsing layers_manifest.json: " + e.toString()); 
+        }
+    }
+
+    if(!manifest) {
+        alert("Could not find layers_manifest.json. Please ensure it is in the same directory or parent directory of the selected folder.");
         return;
     }
 
-    // Find valid files (SVG or PNG)
-    var files = inputFolder.getFiles(function(f){ 
-        return f instanceof File && (/\\.svg$/i.test(f.name) || /\\.png$/i.test(f.name)); 
-    });
-
-    if(files.length === 0){ 
-        alert("No valid assets (SVG/PNG) found in folder."); 
-        return; 
-    }
+    app.beginUndoGroup("SVGA Full Reconstruct");
 
     // 2. Setup Composition
-    app.beginUndoGroup("SVGA Import");
-    var compW = 1920, compH = 1080, compD = 10, compFPS = 30;
+    var compW = manifest.width || 800;
+    var compH = manifest.height || 600;
+    var compFPS = manifest.fps || 30;
+    var compDuration = manifest.duration || 10;
+    if(manifest.frames && manifest.fps) compDuration = manifest.frames / manifest.fps;
+
+    var compName = "SVGA_" + decodeURI(inputFolder.name);
+    var mainComp = app.project.items.addComp(compName, compW, compH, 1, compDuration, compFPS);
+
+    // 3. Import Assets
+    var imageMap = {};
+    var files = inputFolder.getFiles();
     
-    // Try to find manifest to get real dimensions
-    var manifestFile = new File(inputFolder.parent.fsName + "/layers_manifest.json");
-    if(manifestFile.exists){
-        manifestFile.open('r');
-        try {
-            var m = eval("(" + manifestFile.read() + ")");
-            if(m.width) compW = m.width;
-            if(m.height) compH = m.height;
-            if(m.fps) compFPS = m.fps;
-            if(m.duration) compD = m.duration;
-        } catch(e){}
-        manifestFile.close();
-    }
+    function stripExt(name) { return name.replace(/\\.[^\\.]+$/, ""); }
 
-    var mainComp = app.project.items.addComp("SVGA_Import_" + inputFolder.name, compW, compH, 1, compD, compFPS);
-
-    // 3. UI Construction (Matching the screenshot style)
-    var win = new Window("palette", "SVGA to AE Progress");
-    win.orientation = "column";
-    win.alignChildren = ["fill", "top"];
-    win.spacing = 10;
-    win.margins = 20;
-
-    // Title
-    var titleGroup = win.add("group");
-    titleGroup.orientation = "row";
-    titleGroup.add("statictext", undefined, "SVGA -> AE Conversion");
-
-    // Progress Bar
-    var pBar = win.add("progressbar", undefined, 0, files.length);
-    pBar.preferredSize.width = 300;
-    pBar.preferredSize.height = 20;
-
-    // Status Text
-    var stText = win.add("statictext", undefined, "Initializing...");
-    stText.preferredSize.width = 300;
-
-    win.show();
-
-    // 4. Processing Loop
-    try {
-        for(var i=0; i<files.length; i++){
-            var f = files[i];
-            
-            // Update UI
-            pBar.value = i + 1;
-            stText.text = "Processing " + (i + 1) + " / " + files.length + " sprite";
-            win.update(); // Force UI redraw
-
-            // Import Logic
+    for(var i=0; i<files.length; i++){
+        var f = files[i];
+        if (f instanceof File && f.name.match(/\\.(png|jpg|jpeg|gif|svg)$/i)){
             var importOptions = new ImportOptions(f);
             if (importOptions.canImportAs(ImportAsType.FOOTAGE)){
-                var importedItem = app.project.importFile(importOptions);
-                var layer = mainComp.layers.add(importedItem);
-                
-                // Basic center positioning
-                layer.position.setValue([compW/2, compH/2]);
+                var item = app.project.importFile(importOptions);
+                imageMap[f.name] = item;
+                imageMap[stripExt(f.name)] = item;
             }
-            
-            // Small sleep to ensure UI updates visually (optional)
-            $.sleep(10); 
         }
-    } catch(err) {
-        alert("Error: " + err.toString());
+    }
+
+    // Helper: Apply Transforms & Props
+    function applyLayerProps(aeLayer, frames, fps) {
+        if(!aeLayer || !frames) return;
+
+        for(var f=0; f<frames.length; f++){
+            var frame = frames[f];
+            var t = (frame.time !== undefined ? frame.time : f) / fps;
+
+            // Opacity
+            if(frame.alpha !== undefined){
+                aeLayer.opacity.setValueAtTime(t, frame.alpha * 100);
+            }
+
+            // Transform Matrix
+            var tf = frame.transform;
+            if(tf){
+                var a = (tf.a !== undefined) ? tf.a : 1;
+                var b = (tf.b !== undefined) ? tf.b : 0;
+                var c = (tf.c !== undefined) ? tf.c : 0;
+                var d = (tf.d !== undefined) ? tf.d : 1;
+                var tx = (tf.tx !== undefined) ? tf.tx : 0;
+                var ty = (tf.ty !== undefined) ? tf.ty : 0;
+
+                aeLayer.position.setValueAtTime(t, [tx, ty]);
+
+                // Matrix Decomposition for AE (Scale & Rotation)
+                // AE Rotation is in degrees. Math.atan2 returns radians.
+                var r = Math.atan2(b, a); 
+                var sx = Math.sqrt(a*a + b*b);
+                var sy = Math.sqrt(c*c + d*d);
+                
+                // Determinant to check for flipping/mirroring
+                var det = a*d - b*c;
+                if(det < 0) {
+                    sy = -sy; 
+                }
+
+                aeLayer.rotation.setValueAtTime(t, r * 180 / Math.PI);
+                aeLayer.scale.setValueAtTime(t, [sx * 100, sy * 100]);
+            }
+
+            // Layout / Mask (Rectangular)
+            if(frame.layout){
+                var maskGroup = aeLayer.property("ADBE Mask Parade");
+                var mask = (maskGroup.numProperties === 0) ? maskGroup.addProperty("ADBE Mask Atom") : maskGroup.property(1);
+                var maskShapeProp = mask.property("ADBE Mask Shape");
+                
+                var lx = frame.layout.x;
+                var ly = frame.layout.y;
+                var lw = frame.layout.width;
+                var lh = frame.layout.height;
+                
+                var myShape = new Shape();
+                myShape.vertices = [[lx, ly], [lx+lw, ly], [lx+lw, ly+lh], [lx, ly+lh]];
+                myShape.closed = true;
+                maskShapeProp.setValueAtTime(t, myShape);
+            }
+        }
+    }
+
+    // Helper: Set Blend Mode
+    function applyBlendMode(aeLayer, mode) {
+        if(!mode) return;
+        var m = mode.toString().toLowerCase().replace(/_/g, "");
+        if(m === "add" || m === "lineardodge") aeLayer.blendingMode = BlendingMode.ADD;
+        else if(m === "screen") aeLayer.blendingMode = BlendingMode.SCREEN;
+        else if(m === "multiply") aeLayer.blendingMode = BlendingMode.MULTIPLY;
+        else if(m === "overlay") aeLayer.blendingMode = BlendingMode.OVERLAY;
+        else if(m === "darken") aeLayer.blendingMode = BlendingMode.DARKEN;
+        else if(m === "lighten") aeLayer.blendingMode = BlendingMode.LIGHTEN;
+        else if(m === "colordodge") aeLayer.blendingMode = BlendingMode.COLOR_DODGE;
+        else if(m === "colorburn") aeLayer.blendingMode = BlendingMode.COLOR_BURN;
+        else if(m === "hardlight") aeLayer.blendingMode = BlendingMode.HARD_LIGHT;
+        else if(m === "softlight") aeLayer.blendingMode = BlendingMode.SOFT_LIGHT;
+        else if(m === "difference") aeLayer.blendingMode = BlendingMode.DIFFERENCE;
+        else if(m === "exclusion") aeLayer.blendingMode = BlendingMode.EXCLUSION;
+        else if(m === "hue") aeLayer.blendingMode = BlendingMode.HUE;
+        else if(m === "saturation") aeLayer.blendingMode = BlendingMode.SATURATION;
+        else if(m === "color") aeLayer.blendingMode = BlendingMode.COLOR;
+        else if(m === "luminosity") aeLayer.blendingMode = BlendingMode.LUMINOSITY;
+    }
+
+    // 4. Create & Animate Layers
+    var layersData = manifest.layers || [];
+    
+    var win = new Window("palette", "Reconstructing SVGA...");
+    win.orientation = 'column';
+    var pBar = win.add("progressbar", undefined, 0, layersData.length);
+    pBar.preferredSize.width = 300;
+    win.show();
+
+    // Loop through layers
+    for(var l=0; l<layersData.length; l++){
+        pBar.value = l + 1;
+        var layerInfo = layersData[l];
+        var imgKey = layerInfo.image;
+        var item = null;
+        
+        if(imgKey) {
+            item = imageMap[imgKey] || imageMap[imgKey + ".png"] || imageMap[imgKey + ".svg"];
+        }
+
+        var aeLayer = null;
+        if(item){
+            aeLayer = mainComp.layers.add(item);
+        } else {
+            aeLayer = mainComp.layers.addNull();
+            aeLayer.source.name = layerInfo.name || ("Null_" + l);
+            aeLayer.label = 1; 
+        }
+
+        aeLayer.name = layerInfo.name || ("Layer_" + l);
+        
+        // SVGA Anchors are typically Top-Left (0,0) of the asset
+        if (aeLayer.source && aeLayer.source.width) {
+             aeLayer.anchorPoint.setValue([0, 0, 0]);
+        }
+
+        // Apply Blend Mode
+        if(layerInfo.blendMode) applyBlendMode(aeLayer, layerInfo.blendMode);
+
+        // Apply Main Keyframes (Transform & Alpha)
+        applyLayerProps(aeLayer, layerInfo.frames, compFPS);
+
+        // Handle Track Matte (MatteKey)
+        if(layerInfo.matteKey){
+            var matteItem = imageMap[layerInfo.matteKey] || imageMap[layerInfo.matteKey + ".png"];
+            if(matteItem){
+                // Create Matte Layer
+                // Note: mainComp.layers.add() puts layer at index 1 (Top).
+                // Previous layer (aeLayer) becomes index 2.
+                // So adding matte now places it ABOVE aeLayer, which is what we want for Track Matte.
+                var matteLayer = mainComp.layers.add(matteItem);
+                matteLayer.name = "Matte_" + aeLayer.name;
+                matteLayer.anchorPoint.setValue([0, 0, 0]);
+                
+                // Copy transforms to matte layer so it moves with the content? 
+                // In SVGA, the matte usually shares the same transform as the layer, OR has its own frame data.
+                // If the matte is a separate sprite in SVGA, it would be its own layer. 
+                // But if it's a property 'matteKey' of this layer, it likely shares the transform.
+                // We apply the same props here to be safe.
+                applyLayerProps(matteLayer, layerInfo.frames, compFPS);
+
+                // Hide Matte Layer
+                matteLayer.enabled = false;
+
+                // Set Track Matte on the original layer
+                if(aeLayer.canSetTrackMatte){
+                     // 1 = Alpha, 2 = Alpha Inverted, 3 = Luma, 4 = Luma Inverted
+                     aeLayer.trackMatteType = TrackMatteType.ALPHA;
+                }
+            }
+        }
     }
 
     win.close();
     app.endUndoGroup();
-    alert("Import Complete!\\nCreated Comp: " + mainComp.name);
+    alert("Reconstruction Complete! Composition created: " + compName);
 
 })();
 `;
@@ -582,6 +707,17 @@ const Editor: React.FC<EditorProps> = ({ file }) => {
     try {
         if (file.size === 0) throw new Error("The uploaded file is empty.");
 
+        // Inject global dependencies for SVGA Lite (which runs in global scope)
+        // This fixes the "Script error." which often happens when svga.lite tries to access window.JSZip or window.protobuf
+        if (typeof window !== 'undefined') {
+            if (!(window as any).JSZip) {
+                (window as any).JSZip = JSZip;
+            }
+            if (!(window as any).protobuf) {
+                (window as any).protobuf = protobuf;
+            }
+        }
+
         // Wait for SVGA library
         let SVGALib = window.SVGA || window.svga;
         if (!SVGALib) {
@@ -620,8 +756,13 @@ const Editor: React.FC<EditorProps> = ({ file }) => {
             svgaData = await parserRef.current.do(data);
         } catch (parserError: any) {
             console.error("SVGA Parser Error:", parserError);
-            // Catch generic script errors that often occur with SVGA Lite on malformed files
-            throw new Error("Unable to parse SVGA file. The file appears to be corrupted or incompatible.");
+            // "Script error." usually means an error occurred in a script loaded from a different origin (CDN)
+            // and CORS prevented the details from being reported. It often means dependencies are missing or file is corrupt.
+            let msg = parserError.message || parserError.toString();
+            if (msg === "Script error." || !msg) {
+                 msg = "The SVGA parser encountered a cross-origin or internal error. This often happens if required dependencies (JSZip/Protobuf) failed to load or if the file is incompatible.";
+            }
+            throw new Error(msg);
         }
         
         svgaDataRef.current = svgaData; 
@@ -668,7 +809,7 @@ const Editor: React.FC<EditorProps> = ({ file }) => {
                 zip.forEach((relativePath, zipEntry) => {
                     if (zipEntry.dir) return;
 
-                    // 2a. Direct file extraction (png, jpg, svg...)
+                    // 2a. Direct file extraction (png, jpg, jpeg, gif, webp, svg...)
                     if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(relativePath)) {
                         loosePromises.push((async () => {
                             try {
@@ -763,9 +904,9 @@ const Editor: React.FC<EditorProps> = ({ file }) => {
         console.error("LoadSVGA Error:", err);
         if (isActive) {
           let msg = err.message;
-          // Clean up "Script error." which is generic
+          // Clean up "Script error." which is generic and often CORS/dependency related
           if (!msg || msg === "Script error.") {
-              msg = "Error parsing file. Please ensure it is a valid, uncorrupted SVGA file.";
+              msg = "Error parsing file. This usually happens if the file is malformed or if required dependencies (JSZip/Protobuf) failed to load. Please try refreshing the page.";
           }
           setError(msg);
           setLoading(false);
@@ -1171,39 +1312,80 @@ const Editor: React.FC<EditorProps> = ({ file }) => {
     // 3. Normalize layers
     manifest.layers = srcList.map((item: any, idx: number) => {
         const layerName = item.name || item.__name || item.id || `layer_${idx}`;
-        const layerType = item.type || ((item.image || item.res || item.img) ? 'image' : 'shape');
-        const layerImage = item.image || item.img || item.res || null;
+        const layerType = item.type || ((item.image || item.imageKey || item.res || item.img) ? 'image' : 'shape');
+        const layerImage = item.image || item.imageKey || item.img || item.res || null;
+
+        // Enhanced metadata extraction (blendMode, matteKey)
+        // Check root item, extras, and attributes
+        const blendMode = item.blendMode || (item.extra && item.extra.blendMode) || (item.attributes && item.attributes.blendMode) || null;
+        const matteKey = item.matteKey || item.mask || (item.extra && item.extra.matteKey) || null;
 
         const layer: any = {
             name: layerName,
             type: layerType,
             image: layerImage,
+            matteKey: matteKey, 
+            blendMode: blendMode,
             frames: []
         };
 
         const rawFrames = item.frames || item.actions || item.tween || item.keyframes || [];
         
         if (rawFrames.length > 0) {
-            rawFrames.forEach((fr: any) => {
+            rawFrames.forEach((fr: any, fIdx: number) => {
                 let t = fr.time;
                 if (t === undefined) t = fr.frame;
                 if (t === undefined) t = fr.index;
+                if (t === undefined) t = fIdx;
                 
-                // Copy transform props
-                const transform: any = {};
-                for (const k in fr) {
-                    if (k !== 'time' && k !== 'frame' && k !== 'index') {
-                        transform[k] = fr[k];
-                    }
+                const frameData: any = { time: t };
+                
+                // Alpha
+                if (fr.alpha !== undefined) frameData.alpha = fr.alpha;
+
+                // Transform
+                // Safe extraction of properties
+                const tf: any = {};
+                if (fr.transform) {
+                     tf.a = fr.transform.a;
+                     tf.b = fr.transform.b;
+                     tf.c = fr.transform.c;
+                     tf.d = fr.transform.d;
+                     tf.tx = fr.transform.tx;
+                     tf.ty = fr.transform.ty;
+                } else {
+                     ['a','b','c','d','tx','ty'].forEach(k => {
+                        if (fr[k] !== undefined) tf[k] = fr[k];
+                     });
                 }
-                layer.frames.push({ time: t, transform });
+                
+                if (Object.keys(tf).length > 0) {
+                     frameData.transform = tf;
+                }
+
+                // Layout (Mask/Clip)
+                if (fr.layout) {
+                     frameData.layout = {
+                         x: fr.layout.x,
+                         y: fr.layout.y,
+                         width: fr.layout.width,
+                         height: fr.layout.height
+                     };
+                }
+                
+                layer.frames.push(frameData);
             });
         } else {
-             // Look for static transform
+             // Look for static transform on the sprite item itself
              const staticT: any = {};
              ['x','y','scaleX','scaleY','rotation','alpha','matrix','transform','tx','ty'].forEach(k => {
                  if (item[k] !== undefined) staticT[k] = item[k];
              });
+             // Also check inside 'transform' object of the sprite
+             if (item.transform && typeof item.transform === 'object') {
+                 Object.assign(staticT, item.transform);
+             }
+
              if (Object.keys(staticT).length > 0) {
                  layer.frames.push({ time: 0, transform: staticT });
              }
@@ -1541,44 +1723,38 @@ const Editor: React.FC<EditorProps> = ({ file }) => {
                     <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Clock size={14}/> Duration (s)</label>
                     <input 
                         type="number" 
-                        step="0.1"
                         value={lottieParams.durationSeconds} 
                         onChange={(e) => handleLottieParamChange('durationSeconds', e.target.value)}
                         className="bg-[#111] border border-[#333] rounded px-3 py-1.5 text-xs text-right text-white w-24 focus:border-green-500 outline-none" 
                     />
                  </div>
-
-                 <button onClick={handleExportLottie} className="w-full text-sm font-medium py-2.5 rounded-lg bg-green-600 hover:bg-green-500 border border-green-500 text-white flex items-center justify-center gap-2 mt-4">
-                    <Save size={16} />
-                    Export Modified Lottie
-                 </button>
                  
-                 <div className="mt-8 border-t border-[#1a1a1a] pt-4">
-                     <h3 className="text-xs font-bold text-[#666] mb-4 uppercase tracking-widest">Conversion</h3>
-                     <div className="grid grid-cols-2 gap-3">
-                         <button onClick={handleExportLottieToSVGA} className="bg-[#1a1a1a] border border-[#333] text-gray-300 text-xs py-2.5 rounded-lg flex flex-col items-center gap-1.5 hover:border-blue-500 hover:text-white transition-colors"><RefreshCcw size={16} className="text-blue-500" /> To SVGA</button>
-                         <button onClick={() => showServerRequiredAlert('MP4')} className="bg-[#1a1a1a] border border-[#333] text-gray-300 text-xs py-2.5 rounded-lg flex flex-col items-center gap-1.5 hover:border-red-500 hover:text-white transition-colors"><FileVideo size={16} className="text-red-500" /> To MP4</button>
-                     </div>
+                 <div className="pt-4 border-t border-[#1a1a1a]">
+                    <button onClick={handleExportLottie} className="w-full text-sm font-medium py-2.5 rounded-lg bg-green-600 border border-green-500 text-white flex items-center justify-center gap-2 mb-3">
+                        <Save size={16} /> Export JSON
+                    </button>
+                    <button onClick={handleExportLottieToSVGA} disabled={isExporting} className="w-full text-sm font-medium py-2.5 rounded-lg bg-[#222] border border-[#333] text-gray-300 hover:text-white flex items-center justify-center gap-2">
+                         {isExporting ? <Loader2 size={16} className="animate-spin"/> : <ArrowRightLeft size={16} />}
+                         Convert to SVGA (Structure)
+                    </button>
                  </div>
               </div>
           )}
-
-          {fileType === 'svga' && (
-             <div className="mt-8">
-                 <h3 className="text-xs font-bold text-[#666] mb-4 uppercase tracking-widest">Conversion</h3>
-                 <button onClick={() => {}} className="w-full bg-[#1a1a1a] border border-[#333] text-gray-200 text-sm py-2.5 rounded-lg flex items-center justify-center gap-2 mb-3">
-                    <Images size={16} className="text-green-500" /> Export PNG Sequence
-                 </button>
-                 <div className="grid grid-cols-2 gap-3 mb-3">
-                     <button onClick={() => showServerRequiredAlert('MP4')} className="bg-[#1a1a1a] border border-[#333] text-gray-400 text-xs py-2.5 rounded-lg flex flex-col items-center gap-1.5"><FileVideo size={16} className="text-red-500" /> MP4</button>
-                     <button onClick={() => showServerRequiredAlert('Lottie')} className="bg-[#1a1a1a] border border-[#333] text-gray-400 text-xs py-2.5 rounded-lg flex flex-col items-center gap-1.5"><FileJson size={16} className="text-yellow-500" /> Lottie</button>
-                 </div>
-                 
-                 <button onClick={handleExportManifest} className="w-full bg-[#1a1a1a] border border-[#333] text-gray-300 text-xs py-2.5 rounded-lg flex items-center justify-center gap-2 hover:border-purple-500 hover:text-purple-400 transition-colors">
-                    <Layers size={14} /> Export Source & Manifest (Zip)
-                 </button>
-             </div>
-          )}
+          
+          <div className="mt-8 pt-6 border-t border-[#1a1a1a]">
+             <h3 className="text-xs font-bold text-[#666] mb-4 uppercase tracking-widest">Tools</h3>
+             <button onClick={() => showServerRequiredAlert("GIF")} className="w-full text-left text-xs text-gray-400 py-2 hover:text-white flex items-center gap-2">
+                 <FileVideo size={14}/> Convert to GIF
+             </button>
+             <button onClick={() => showServerRequiredAlert("WEBP")} className="w-full text-left text-xs text-gray-400 py-2 hover:text-white flex items-center gap-2">
+                 <Images size={14}/> Convert to WebP
+             </button>
+              {fileType === 'svga' && (
+                  <button onClick={handleExportManifest} disabled={isExporting} className="w-full text-left text-xs text-gray-400 py-2 hover:text-blue-400 flex items-center gap-2">
+                      <Layers size={14}/> Export AE Manifest & Assets
+                  </button>
+              )}
+          </div>
         </div>
       </div>
     </div>
