@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Briefcase, MapPin, Clock, CheckCircle } from 'lucide-react';
+import { X, Briefcase, MapPin, Clock, CheckCircle, Loader2 } from 'lucide-react';
 import { JobPosition } from '../types';
 import { JOB_POSITIONS } from '../constants';
+import { db } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface JobsModalProps {
   onClose: () => void;
@@ -9,12 +11,28 @@ interface JobsModalProps {
 
 const JobsModal: React.FC<JobsModalProps> = ({ onClose }) => {
   const [appliedJobs, setAppliedJobs] = useState<number[]>([]);
+  const [loadingIds, setLoadingIds] = useState<number[]>([]);
 
-  const handleApply = (id: number) => {
-    // Simulate API call
-    setTimeout(() => {
-      setAppliedJobs(prev => [...prev, id]);
-    }, 600);
+  const handleApply = async (job: JobPosition) => {
+    try {
+      setLoadingIds(prev => [...prev, job.id]);
+      
+      // Save application to Firestore
+      await addDoc(collection(db, "job_applications"), {
+        jobId: job.id,
+        jobTitle: job.title,
+        department: job.department,
+        appliedAt: serverTimestamp(),
+        status: 'pending'
+      });
+
+      setAppliedJobs(prev => [...prev, job.id]);
+    } catch (error) {
+      console.error("Error applying for job:", error);
+      alert("Something went wrong. Please check your connection.");
+    } finally {
+      setLoadingIds(prev => prev.filter(id => id !== job.id));
+    }
   };
 
   return (
@@ -44,6 +62,7 @@ const JobsModal: React.FC<JobsModalProps> = ({ onClose }) => {
         <div className="overflow-y-auto p-6 space-y-4 custom-scrollbar">
           {JOB_POSITIONS.map((job) => {
             const isApplied = appliedJobs.includes(job.id);
+            const isLoading = loadingIds.includes(job.id);
 
             return (
               <div 
@@ -79,17 +98,19 @@ const JobsModal: React.FC<JobsModalProps> = ({ onClose }) => {
 
                   <div className="flex items-center self-start md:self-center mt-2 md:mt-0">
                     <button
-                      onClick={() => !isApplied && handleApply(job.id)}
-                      disabled={isApplied}
+                      onClick={() => !isApplied && !isLoading && handleApply(job)}
+                      disabled={isApplied || isLoading}
                       className={`
-                        flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all
+                        flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all min-w-[120px] justify-center
                         ${isApplied 
                           ? 'bg-green-500/10 text-green-500 border border-green-500/20 cursor-default' 
                           : 'bg-white text-black hover:bg-gray-200 shadow-[0_0_15px_rgba(255,255,255,0.1)]'
                         }
                       `}
                     >
-                      {isApplied ? (
+                      {isLoading ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : isApplied ? (
                         <>
                           <CheckCircle size={16} />
                           Applied
@@ -107,7 +128,7 @@ const JobsModal: React.FC<JobsModalProps> = ({ onClose }) => {
 
         {/* Footer */}
         <div className="p-4 border-t border-[#1a1a1a] bg-[#0f0f0f] text-center text-xs text-gray-600">
-          MotionTools is an equal opportunity employer.
+          مصمم برستيج is an equal opportunity employer.
         </div>
       </div>
     </div>

@@ -6,13 +6,29 @@ import ChatWidget from './components/ChatWidget';
 import Editor from './components/Editor';
 import JobsModal from './components/JobsModal';
 import { FEATURES } from './constants';
+import { db } from './firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [isJobsOpen, setIsJobsOpen] = useState(false);
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     setCurrentFile(file);
+    
+    // Log upload activity to Firestore
+    try {
+      await addDoc(collection(db, "activity_logs"), {
+        type: 'file_upload',
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type || 'unknown',
+        timestamp: serverTimestamp()
+      });
+      console.log("Upload logged to Firebase");
+    } catch (e) {
+      console.error("Error logging to Firebase:", e);
+    }
   };
 
   return (
@@ -28,7 +44,7 @@ const App: React.FC = () => {
           {/* Hero Section */}
           <div className="text-center max-w-3xl mx-auto mb-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-6 flex items-center justify-center gap-3">
-              <span>MotionTools</span>
+              <span>مصمم برستيج</span>
               <span className="text-4xl md:text-5xl">😎</span>
             </h1>
             <p className="text-gray-500 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
@@ -57,7 +73,7 @@ const App: React.FC = () => {
       
       {!currentFile && (
         <footer className="py-8 text-center text-neutral-800 text-xs">
-          <p>&copy; 2024 MotionTools. All rights reserved.</p>
+          <p>&copy; 2024 مصمم برستيج. All rights reserved.</p>
         </footer>
       )}
     </div>

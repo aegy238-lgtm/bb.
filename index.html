@@ -4,11 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MotionTools</title>
+    <title>مصمم برستيج</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Global Dependencies for SVGA Lite -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <!-- Use Protobuf 6.x for better compatibility with svga.lite -->
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@6.11.4/dist/protobuf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/svga.lite/svga.lite.min.js"></script>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+    <!-- Switch to unpkg for FFmpeg to resolve "Failed to fetch" errors often caused by CDN CORS issues -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <style>
       body {
         font-family: 'Inter', sans-serif;
@@ -23,8 +31,9 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
-    "jszip": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm",
-    "protobufjs": "https://aistudiocdn.com/protobufjs@^7.5.4"
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js",
+    "firebase/": "https://esm.sh/firebase@^12.6.0/"
   }
 }
 </script>

@@ -43,7 +43,7 @@ export const JOB_POSITIONS: JobPosition[] = [
     department: "Design",
     type: "Full-time",
     location: "San Francisco, CA",
-    description: "Shape the future of MotionTools interface and create intuitive workflows for animators."
+    description: "Shape the future of مصمم برستيج interface and create intuitive workflows for animators."
   },
   {
     id: 3,

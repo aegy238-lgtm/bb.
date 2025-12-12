@@ -10,7 +10,7 @@ const Header: React.FC<HeaderProps> = ({ onOpenJobs }) => {
     <header className="w-full flex items-center justify-between px-6 py-5 text-sm z-50 relative">
       <div className="flex items-center gap-6">
         <a href="/" className="font-bold text-lg tracking-tight text-white hover:text-blue-500 transition-colors">
-          MotionTools
+          مصمم برستيج
         </a>
         <a 
           href="#" 

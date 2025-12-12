@@ -39,24 +39,44 @@ declare global {
         destroy: () => void;
         set: (options: { loop?: number; fillMode?: string }) => void;
         setImage?: (url: string, key: string) => void; 
+        drawer: {
+           draw: (frame: number) => void;
+        };
       };
     };
     // Keep backward compatibility just in case, though we primarily use SVGA now
     svga: any; 
     
+    // JSZip global
+    JSZip: any;
+
     // Lottie Web types
     lottie: {
       loadAnimation: (params: {
-        container: Element;
-        renderer: 'svg' | 'canvas' | 'html';
-        loop: boolean;
-        autoplay: boolean;
+        container?: Element;
+        renderer?: 'svg' | 'canvas' | 'html';
+        loop?: boolean | number;
+        autoplay?: boolean;
         animationData?: any;
         path?: string;
+        rendererSettings?: {
+          preserveAspectRatio?: string;
+          context?: any;
+          clearCanvas?: boolean;
+          className?: string;
+          id?: string;
+          [key: string]: any;
+        };
       }) => any; // Returns AnimationItem
       destroy: (name?: string) => void;
       stop: (name?: string) => void;
       play: (name?: string) => void;
+    };
+
+    // FFmpeg v0.11 global
+    FFmpeg: {
+      createFFmpeg: (options?: { log?: boolean; corePath?: string; logger?: (msg: any) => void }) => any;
+      fetchFile: (file: File | Blob | string) => Promise<Uint8Array>;
     };
   }
 }
