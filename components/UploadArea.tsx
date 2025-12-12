@@ -57,15 +57,15 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onFileSelect }) => {
           </div>
           
           <h3 className="text-2xl font-medium text-white mb-3">
-            Drag files here or click to select files
+            اسحب الملفات هنا أو انقر للاختيار
           </h3>
           
           <p className="text-gray-500 text-sm mb-8">
-            Supports SVGA, Lottie, GIF, WebP, MP4 and other formats
+            يدعم SVGA, Lottie, GIF, WebP, MP4 وغيرها من الصيغ
           </p>
 
-          <button className="px-6 py-2.5 rounded-lg bg-neutral-800 text-gray-200 text-sm font-medium border border-neutral-700">
-            Click to select files
+          <button className="px-6 py-2.5 rounded-lg bg-neutral-800 text-gray-200 text-sm font-medium border border-neutral-700 hover:bg-neutral-700 transition-colors">
+            اختر ملفاً من جهازك
           </button>
         </div>
       </div>

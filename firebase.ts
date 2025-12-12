@@ -1,5 +1,7 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyB7z-5161J57yynvO7mtIM-pHjAHrwsM-I",
@@ -10,8 +12,18 @@ const firebaseConfig = {
   appId: "1:291354235514:web:1ccb4549b818eeae8f21c3"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Primary Firebase App
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore
+// Initialize Secondary App (For creating users without logging out the admin)
+const secondaryApp = !getApps().some(a => a.name === 'Secondary') 
+  ? initializeApp(firebaseConfig, 'Secondary') 
+  : getApp('Secondary');
+
+// Initialize Services
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const storage = getStorage(app);
+
+// Export Secondary Auth for Admin User Creation
+export const secondaryAuth = getAuth(secondaryApp);
