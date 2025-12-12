@@ -1,82 +1,112 @@
-import { LucideIcon } from 'lucide-react';
 
-export interface FeatureItem {
+export enum Currency {
+  // Global
+  USD = 'USD',
+  GBP = 'GBP',
+  EUR = 'EUR',
+  
+  // Arab Countries
+  EGP = 'EGP', // Egypt
+  SAR = 'SAR', // Saudi Arabia
+  AED = 'AED', // UAE
+  KWD = 'KWD', // Kuwait
+  QAR = 'QAR', // Qatar
+  BHD = 'BHD', // Bahrain
+  OMR = 'OMR', // Oman
+  JOD = 'JOD', // Jordan
+  IQD = 'IQD', // Iraq
+  YER = 'YER', // Yemen
+  LBP = 'LBP', // Lebanon
+  SYP = 'SYP', // Syria
+  SDG = 'SDG', // Sudan
+  LYD = 'LYD', // Libya
+  TND = 'TND', // Tunisia
+  DZD = 'DZD', // Algeria
+  MAD = 'MAD', // Morocco
+  MRU = 'MRU', // Mauritania
+  SOS = 'SOS', // Somalia
+  DJF = 'DJF', // Djibouti
+  KMF = 'KMF'  // Comoros
+}
+
+export enum OrderStatus {
+  PENDING = 'قيد الانتظار',
+  COMPLETED = 'مكتمل',
+  CANCELLED = 'ملغي',
+  AUTO_COMPLETED = 'مكتمل تلقائياً'
+}
+
+export enum PaymentMethod {
+  WALLET = 'WALLET',
+  AGENT = 'AGENT'
+}
+
+export interface Order {
+  id: string;
+  username: string;
+  userId: string;
+  appName: string;
+  amount: number;
+  currency: Currency;
+  status: OrderStatus;
+  paymentMethod?: PaymentMethod;
+  date: string; // ISO string
+  timestamp: number;
+  adminMessage?: string; // New: Message from admin to user
+  isRead?: boolean; // New: If user read the notification
+}
+
+export interface DashboardStats {
+  visitors: number;
+  totalOrders: number;
+  totalAmount: number;
+}
+
+export interface AgencyConfig {
+  agencyUrl: string;
+  apiKey: string;
+  isConnected: boolean;
+  lastSync: number | null;
+}
+
+export interface User {
+  id: string; // UUID
+  serialId: string; // The sequential ID (e.g., 10001)
+  email: string;
+  password: string; // In a real app, this must be hashed
+  username: string;
+  balanceUSD: number;
+  balanceCoins: number;
+  createdAt: number;
+  isBanned?: boolean; // New: Ban status
+  isAdmin?: boolean; // New: Super Admin Flag
+}
+
+export type BannerStyle = 'promo' | 'info' | 'warning' | 'alert';
+
+export interface BannerConfig {
+  isVisible: boolean;
   title: string;
-  description: string;
-  icon: LucideIcon;
-  iconColor: string; // Tailwind class for text color
+  message: string;
+  style: BannerStyle;
 }
 
-export interface NavItem {
-  label: string;
-  href: string;
-  icon?: LucideIcon;
-  highlight?: boolean;
+export interface SiteConfig {
+  name: string;
+  slogan?: string;
 }
 
-export interface JobPosition {
-  id: number;
-  title: string;
-  department: string;
-  type: string;
-  location: string;
-  description: string;
+export interface AppConfig {
+    id: string;
+    name: string;
+    exchangeRate: number; // Coins per 1 Unit of currency (usually USD)
+    isActive: boolean;
+    icon?: string; // Optional icon name
 }
 
-declare global {
-  interface Window {
-    SVGA: {
-      Parser: new () => {
-        do: (data: Uint8Array) => Promise<any>;
-      };
-      Player: new (canvas: string | HTMLCanvasElement) => {
-        mount: (videoItem: any) => Promise<void>;
-        start: () => void;
-        pause: () => void;
-        stop: () => void;
-        step: (frame: number) => void;
-        clear: () => void;
-        destroy: () => void;
-        set: (options: { loop?: number; fillMode?: string }) => void;
-        setImage?: (url: string, key: string) => void; 
-        drawer: {
-           draw: (frame: number) => void;
-        };
-      };
-    };
-    // Keep backward compatibility just in case, though we primarily use SVGA now
-    svga: any; 
-    
-    // JSZip global
-    JSZip: any;
-
-    // Lottie Web types
-    lottie: {
-      loadAnimation: (params: {
-        container?: Element;
-        renderer?: 'svg' | 'canvas' | 'html';
-        loop?: boolean | number;
-        autoplay?: boolean;
-        animationData?: any;
-        path?: string;
-        rendererSettings?: {
-          preserveAspectRatio?: string;
-          context?: any;
-          clearCanvas?: boolean;
-          className?: string;
-          id?: string;
-          [key: string]: any;
-        };
-      }) => any; // Returns AnimationItem
-      destroy: (name?: string) => void;
-      stop: (name?: string) => void;
-      play: (name?: string) => void;
-    };
-
-    // FFmpeg v0.11 global
-    FFmpeg: {
-      createFFmpeg: (options?: { log?: boolean; corePath?: string; logger?: (msg: any) => void }) => any;
-      fetchFile: (file: File | Blob | string) => Promise<Uint8Array>;
-    };
-  }
+export interface ContactConfig {
+    primaryPhone: string;
+    buttonLabel: string; // The text on the main button
+    secondaryPhone?: string;
+    tertiaryPhone?: string;
 }
