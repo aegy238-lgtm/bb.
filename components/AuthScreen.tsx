@@ -3,7 +3,11 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'fire
 import { auth } from '../firebase';
 import { Loader2, Lock, Mail, UserPlus, LogIn } from 'lucide-react';
 
-const AuthScreen: React.FC = () => {
+interface AuthScreenProps {
+  siteName?: string;
+}
+
+const AuthScreen: React.FC<AuthScreenProps> = ({ siteName = "مصمم برستيج" }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +48,7 @@ const AuthScreen: React.FC = () => {
       <div className="w-full max-w-md bg-[#0a0a0a] border border-[#222] rounded-2xl p-8 shadow-2xl shadow-black/50">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2 text-white flex items-center justify-center gap-2">
-            مصمم برستيج <span className="text-2xl">😎</span>
+            {siteName} <span className="text-2xl">😎</span>
           </h1>
           <p className="text-gray-500 text-sm">
             {isLogin ? 'أهلاً بعودتك! الرجاء تسجيل الدخول للمتابعة.' : 'أنشئ حساباً جديداً للبدء.'}

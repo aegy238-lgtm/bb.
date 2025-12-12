@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { X, BarChart3, FileText, Users, Activity, Search, Shield, Calendar, Download, Folder, Image, Video, UserX, UserCheck, ShieldAlert, BadgeCheck, Lock, Key, Loader2, Mail } from 'lucide-react';
+import { X, BarChart3, FileText, Users, Activity, Search, Shield, Calendar, Download, Folder, Image, Video, UserX, UserCheck, ShieldAlert, BadgeCheck, Lock, Key, Loader2, Mail, Settings, Save } from 'lucide-react';
 import { db, auth, secondaryAuth } from '../firebase'; // Import secondaryAuth
 import { createUserWithEmailAndPassword, signOut as secondarySignOut } from 'firebase/auth'; // Import auth functions
-import { collection, query, orderBy, limit, getDocs, where, doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, where, doc, updateDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 interface AdminDashboardProps {
   onClose: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'jobs' | 'files' | 'users'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'jobs' | 'files' | 'users' | 'settings'>('overview');
   const [stats, setStats] = useState({ users: 0, uploads: 0, applications: 0 });
   const [activities, setActivities] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
@@ -22,6 +22,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+
+  // Site Settings
+  const [configName, setConfigName] = useState('');
+  const [configDesc, setConfigDesc] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Define the Owner Email (The Super Admin)
   const OWNER_EMAIL = "admin@prestigedesigner.com";
@@ -60,6 +65,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         const usersQ = query(collection(db, "users"), orderBy("createdAt", "desc"));
         const userSnap = await getDocs(usersQ);
         setUsersList(userSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } else if (activeTab === 'settings') {
+        const settingsSnap = await getDoc(doc(db, "settings", "general"));
+        if (settingsSnap.exists()) {
+          const data = settingsSnap.data();
+          setConfigName(data.name || "مصمم برستيج");
+          setConfigDesc(data.description || "وصف الموقع الافتراضي...");
+        } else {
+          setConfigName("مصمم برستيج");
+          setConfigDesc("");
+        }
       }
       
     } catch (error) {
@@ -84,6 +99,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   };
 
   // --- Actions ---
+
+  const handleSaveSettings = async () => {
+    if (!configName) { alert("يجب إدخال اسم للموقع"); return; }
+    setSavingSettings(true);
+    try {
+      await setDoc(doc(db, "settings", "general"), {
+        name: configName,
+        description: configDesc,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.email
+      }, { merge: true });
+      alert("✅ تم حفظ الإعدادات بنجاح! سيتم تحديث الموقع فوراً.");
+    } catch(e) {
+      console.error(e);
+      alert("حدث خطأ أثناء الحفظ");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleBanUser = async (userId: string, userEmail: string, currentStatus: boolean) => {
     // Protection 1: Check if target is Owner
@@ -226,6 +260,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               <FileText size={18} /> طلبات التوظيف
               {stats.applications > 0 && <span className="mr-auto bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{stats.applications}</span>}
             </button>
+            <div className="pt-4 mt-2 border-t border-[#1a1a1a]">
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-[#1a1a1a] hover:text-white'}`}
+              >
+                <Settings size={18} /> إعدادات الموقع
+              </button>
+            </div>
           </nav>
 
           <div className="p-4 border-t border-[#1a1a1a]">
@@ -245,6 +287,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               {activeTab === 'activity' && 'النشاط المباشر'}
               {activeTab === 'files' && 'إدارة الملفات'}
               {activeTab === 'jobs' && 'الطلبات المقدمة'}
+              {activeTab === 'settings' && 'إعدادات الموقع العامة'}
             </h3>
             <div className="flex items-center gap-3">
                <div className="hidden md:flex items-center gap-2 bg-[#111] border border-[#222] rounded-lg px-3 py-1.5">
@@ -295,6 +338,66 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                    <p className="text-gray-500 text-sm max-w-sm">
                      هنا ستظهر الرسوم البيانية التفصيلية لتحليلات الاستخدام والمستخدمين.
                    </p>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'settings' && (
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="bg-[#111] border border-[#222] rounded-xl p-6">
+                   <div className="flex items-center gap-3 mb-6 pb-4 border-b border-[#222]">
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                        <Settings className="text-blue-500" size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-white font-medium">هوية الموقع</h4>
+                        <p className="text-gray-500 text-xs">تعديل الاسم والوصف الذي يظهر للزوار.</p>
+                      </div>
+                   </div>
+
+                   <div className="space-y-4">
+                      <div>
+                        <label className="block text-gray-400 text-xs mb-2">اسم الموقع</label>
+                        <input 
+                          type="text" 
+                          value={configName}
+                          onChange={(e) => setConfigName(e.target.value)}
+                          className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-4 py-3 text-white text-sm focus:border-blue-500 outline-none text-right"
+                          placeholder="مثال: مصمم برستيج"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-gray-400 text-xs mb-2">وصف الموقع</label>
+                        <textarea 
+                          value={configDesc}
+                          onChange={(e) => setConfigDesc(e.target.value)}
+                          className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-4 py-3 text-white text-sm focus:border-blue-500 outline-none text-right h-32 resize-none"
+                          placeholder="اكتب وصفاً مختصراً يظهر في الصفحة الرئيسية..."
+                        />
+                      </div>
+
+                      <div className="pt-4 flex justify-end">
+                        <button 
+                          onClick={handleSaveSettings}
+                          disabled={savingSettings}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                          {savingSettings ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                          حفظ التغييرات
+                        </button>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 flex items-start gap-3">
+                   <ShieldAlert className="text-yellow-500 shrink-0 mt-0.5" size={18} />
+                   <div>
+                      <h5 className="text-yellow-500 text-sm font-medium mb-1">تنبيه هام</h5>
+                      <p className="text-gray-400 text-xs leading-relaxed">
+                        تغيير هذه الإعدادات سيؤثر على جميع زوار الموقع فوراً. يرجى التأكد من صحة النصوص قبل الحفظ.
+                      </p>
+                   </div>
                 </div>
               </div>
             )}

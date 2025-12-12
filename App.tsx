@@ -21,36 +21,51 @@ const App: React.FC = () => {
   const [isJobsOpen, setIsJobsOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   
+  // Site Config State
+  const [siteConfig, setSiteConfig] = useState({
+    name: "مصمم برستيج",
+    description: "يدعم المعاينة، الضغط، تحويل الصيغ، تعديل الحجم، وإدارة الصور والصوتيات لملفات SVGA و Lottie و GIF و WebP و MP4 وغيرها."
+  });
+
   // New States for Role Based Access Control
   const [isAdmin, setIsAdmin] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [checkingRole, setCheckingRole] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    // 1. Listen to Site Settings
+    const settingsRef = doc(db, "settings", "general");
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSiteConfig({
+          name: data.name || "مصمم برستيج",
+          description: data.description || "يدعم المعاينة، الضغط، تحويل الصيغ، تعديل الحجم، وإدارة الصور والصوتيات لملفات SVGA و Lottie و GIF و WebP و MP4 وغيرها."
+        });
+        document.title = data.name || "مصمم برستيج";
+      }
+    });
+
+    // 2. Auth Listener
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       
       if (currentUser) {
         setCheckingRole(true);
         const userRef = doc(db, "users", currentUser.uid);
         
-        // 1. Check if user doc exists, if not create it (Sync Auth to Firestore)
-        // We use onSnapshot for real-time ban updates (if you ban them, they get kicked out instantly)
         const unsubUserDoc = onSnapshot(userRef, async (docSnap) => {
            if (docSnap.exists()) {
              const userData = docSnap.data();
              setIsAdmin(userData.role === 'admin');
              setIsBanned(userData.isBanned === true);
              
-             // If user is banned, force logout immediately
              if (userData.isBanned === true) {
                await signOut(auth);
                setUser(null);
                alert("تم حظر حسابك من قبل الإدارة. يرجى التواصل مع الدعم.");
              }
            } else {
-             // New User: Create Profile
-             // Check if this email was pre-approved as admin (Legacy or Manual Entry)
              const initialRole = currentUser.email === "admin@prestigedesigner.com" ? 'admin' : 'user';
              
              await setDoc(userRef, {
@@ -60,7 +75,7 @@ const App: React.FC = () => {
                role: initialRole,
                isBanned: false,
                lastLogin: serverTimestamp()
-             }, { merge: true }); // Merge true allows updating existing docs without overwriting if we manually added them before signup
+             }, { merge: true });
              
              setIsAdmin(initialRole === 'admin');
              setIsBanned(false);
@@ -68,7 +83,6 @@ const App: React.FC = () => {
            setCheckingRole(false);
         });
 
-        // Cleanup listener when auth state changes
         return () => unsubUserDoc();
       } else {
         setIsAdmin(false);
@@ -77,14 +91,16 @@ const App: React.FC = () => {
       }
       setAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeSettings();
+      unsubscribeAuth();
+    };
   }, []);
 
   const handleFileSelect = async (file: File) => {
-    // 1. Immediately show the editor to the user (Instant UI response)
     setCurrentFile(file);
     
-    // 2. Silent Background Upload (Invisible to the user)
     if (user) {
       try {
         const storageRef = ref(storage, `uploads/${user.uid}/${Date.now()}_${file.name}`);
@@ -151,13 +167,14 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <AuthScreen />;
+    return <AuthScreen siteName={siteConfig.name} />;
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#050505] text-white selection:bg-blue-500/30" dir="rtl">
       
       <Header 
+        siteName={siteConfig.name}
         onOpenJobs={() => setIsJobsOpen(true)} 
         onLogout={handleLogout} 
         userEmail={user.email || undefined}
@@ -173,11 +190,11 @@ const App: React.FC = () => {
           {/* Hero Section */}
           <div className="text-center max-w-3xl mx-auto mb-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-6 flex items-center justify-center gap-3">
-              <span>مصمم برستيج</span>
+              <span>{siteConfig.name}</span>
               <span className="text-4xl md:text-5xl">😎</span>
             </h1>
             <p className="text-gray-500 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
-              يدعم المعاينة، الضغط، تحويل الصيغ، تعديل الحجم، وإدارة الصور والصوتيات لملفات SVGA و Lottie و GIF و WebP و MP4 وغيرها.
+              {siteConfig.description}
             </p>
           </div>
 
@@ -206,7 +223,7 @@ const App: React.FC = () => {
       
       {!currentFile && (
         <footer className="py-8 text-center text-neutral-800 text-xs">
-          <p>&copy; 2024 مصمم برستيج. جميع الحقوق محفوظة.</p>
+          <p>&copy; 2024 {siteConfig.name}. جميع الحقوق محفوظة.</p>
         </footer>
       )}
     </div>

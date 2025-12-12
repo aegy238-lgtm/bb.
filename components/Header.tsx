@@ -2,6 +2,7 @@ import React from 'react';
 import { Globe, ThumbsUp, Briefcase, LogOut, User, Shield } from 'lucide-react';
 
 interface HeaderProps {
+  siteName?: string;
   onOpenJobs?: () => void;
   onLogout?: () => void;
   userEmail?: string;
@@ -9,12 +10,12 @@ interface HeaderProps {
   onOpenAdmin?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onOpenJobs, onLogout, userEmail, isAdmin, onOpenAdmin }) => {
+const Header: React.FC<HeaderProps> = ({ siteName = "مصمم برستيج", onOpenJobs, onLogout, userEmail, isAdmin, onOpenAdmin }) => {
   return (
     <header className="w-full flex items-center justify-between px-6 py-5 text-sm z-50 relative bg-[#050505] border-b border-[#1a1a1a]">
       <div className="flex items-center gap-6">
         <a href="/" className="font-bold text-lg tracking-tight text-white hover:text-blue-500 transition-colors">
-          مصمم برستيج
+          {siteName}
         </a>
         <a 
           href="#" 
